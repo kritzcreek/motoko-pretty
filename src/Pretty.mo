@@ -59,6 +59,41 @@ type Doc<A> = {
   #empty;
 };
 
+public func showDoc<A>(showAnn : A -> Text, doc : Doc<A>) : Text {
+  switch doc {
+    case (#append(d1, d2)) {
+      "#append(" # showDoc(showAnn, d1) # ", " # showDoc(showAnn, d2) # ")"
+    };
+    case (#indent(d)) {
+      "#indent(" # showDoc(showAnn, d) # ")"
+    };
+    case (#align(n, d)) {
+      "#align(" # Nat.toText(n) # ", " # showDoc(showAnn, d) # ")"
+    };
+    case (#annotate(ann, d)) {
+      "#annotate(" # showAnn(ann) # ", " # showDoc(showAnn, d) # ")"
+    };
+    case (#flexSelect(d1, d2, d3)) {
+      "#flexSelect(" # showDoc(showAnn, d1) # ", " # showDoc(showAnn, d2) # ", " # showDoc(showAnn, d3) # ")"
+    };
+    case (#flexAlt(d1, d2)) {
+      "#flexAlt(" # showDoc(showAnn, d1) # ", " # showDoc(showAnn, d2) # ")"
+    };
+    case (#withPosition(_)) {
+      "#withPosition(<func>)"
+    };
+    case (#text(_, t)) {
+      "#text(" # t # ")"
+    };
+    case (#linebreak) {
+      "#linebreak"
+    };
+    case (#empty) {
+      "#empty"
+    };
+  }
+};
+
 /// Transforms all annotations in the given document, using the passed function
 public func mapDoc<A, B>(doc : Doc<A>, f : A -> B): Doc<B> {
   switch doc {
