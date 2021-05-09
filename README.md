@@ -4,7 +4,7 @@ A pretty printer library for Motoko.
 
 Ported from [purescript-dodo-printer](https://github.com/natefaubion/purescript-dodo-printer).
 
-All credit goes to Nate Faubion
+All credit goes to Nathan Faubion
 
 ## How to develop
 
