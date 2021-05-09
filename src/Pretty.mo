@@ -491,9 +491,7 @@ public func print<Buf, A, Res>(printer : Printer<Buf, A, Res>, opts : PrintOptio
     flexGroup = #noFlexGroup;
   };
 
-  var stack: List.List<DocCmd<A>> = List.make(#doc(doc));
-
-  func go(state : DocState<Buf, A>) : Res {
+  func go(stack : List.List<DocCmd<A>>, state : DocState<Buf, A>) : Res {
     switch stack {
       case null { printer.flushBuffer(Buffer.get(state.buffer)) };
       case (?(cmd, stk)) {
@@ -501,25 +499,24 @@ public func print<Buf, A, Res>(printer : Printer<Buf, A, Res>, opts : PrintOptio
           case (#doc(doc)) {
             switch(doc) {
               case (#append(doc1, doc2)) {
-                stack := List.push(#doc(doc1), List.push(#doc(doc2), stk));
-                go(state)
+                go(List.push(#doc(doc1), List.push(#doc(doc2), stk)), state)
               };
               case (#text(len, str)) {
                 if (state.position.column == 0 and state.position.indent > 0) {
-                  go({
-                      annotations = state.annotations;
-                      indentSpaces = state.indentSpaces;
-                      flexGroup = state.flexGroup;
+                  go(stack, {
                       buffer = Buffer.modify(
                         state.buffer,
                         func (b: Buf): Buf {
                           printer.writeIndent(state.position.indent, state.indentSpaces, b)
                         });
                       position = setColumn(state.position, state.position.indent);
+
+                      annotations = state.annotations;
+                      indentSpaces = state.indentSpaces;
+                      flexGroup = state.flexGroup;
                     })
                 } else if (state.position.column + len <= state.position.indent + state.position.ribbonWidth) {
-                  stack := stk;
-                  go({
+                  go(stk, {
                       annotations = state.annotations;
                       indentSpaces = state.indentSpaces;
                       flexGroup = state.flexGroup;
@@ -529,12 +526,10 @@ public func print<Buf, A, Res>(printer : Printer<Buf, A, Res>, opts : PrintOptio
                 } else {
                   switch (state.flexGroup) {
                     case (#flexGroupReset(frame)) {
-                      stack := frame.stack;
-                      go(resetState(frame))
+                      go(frame.stack, resetState(frame))
                     };
                     case _ {
-                      stack := stk;
-                      go({
+                      go(stk, {
                         annotations = state.annotations;
                         indentSpaces = state.indentSpaces;
                         flexGroup = #noFlexGroup;
@@ -548,167 +543,168 @@ public func print<Buf, A, Res>(printer : Printer<Buf, A, Res>, opts : PrintOptio
               case (#linebreak) {
                 switch (state.flexGroup) {
                   case (#flexGroupReset(frame)) {
-                    stack := frame.stack;
-                    go(resetState(frame))
+                    go(frame.stack, resetState(frame))
                   };
                   case _ {
-                    stack := stk;
-                    go({
-                      annotations = state.annotations;
-                      indentSpaces = state.indentSpaces;
-                      flexGroup = #noFlexGroup;
-                      buffer = Buffer.modify(state.buffer, printer.writeBreak);
-                      position = {
-                        line = state.position.line + 1;
-                        column = 0;
-                        indent = state.position.nextIndent;
-                        ribbonWidth = calcRibbonWidth(state.position.nextIndent);
-                        nextIndent = state.position.nextIndent;
-                        pageWidth = state.position.pageWidth;
-                      };
-                    })
+                    go(
+                      stk,
+                      {
+                        annotations = state.annotations;
+                        indentSpaces = state.indentSpaces;
+                        flexGroup = #noFlexGroup;
+                        buffer = Buffer.modify(state.buffer, printer.writeBreak);
+                        position = {
+                          line = state.position.line + 1;
+                          column = 0;
+                          indent = state.position.nextIndent;
+                          ribbonWidth = calcRibbonWidth(state.position.nextIndent);
+                          nextIndent = state.position.nextIndent;
+                          pageWidth = state.position.pageWidth;
+                        };
+                      })
                   };
                 }
               };
               case (#indent(doc)) {
                 if (state.position.column == 0) {
-                  stack := List.push(#doc(doc), List.push(#dedent(state.indentSpaces, state.position.nextIndent), stk));
-                  go({
-                    indentSpaces = state.indentSpaces # opts.indentUnit;
-                    position = {
-                      indent = state.position.nextIndent + opts.indentWidth;
-                      ribbonWidth = calcRibbonWidth(state.position.nextIndent + opts.indentWidth);
-                      nextIndent = state.position.nextIndent + opts.indentWidth;
+                  go(
+                    List.push(#doc(doc), List.push(#dedent(state.indentSpaces, state.position.nextIndent), stk)),
+                    {
+                      indentSpaces = state.indentSpaces # opts.indentUnit;
+                      position = {
+                        indent = state.position.nextIndent + opts.indentWidth;
+                        ribbonWidth = calcRibbonWidth(state.position.nextIndent + opts.indentWidth);
+                        nextIndent = state.position.nextIndent + opts.indentWidth;
 
-                      line = state.position.line;
-                      column = state.position.column;
-                      pageWidth = state.position.pageWidth;
-                    };
+                        line = state.position.line;
+                        column = state.position.column;
+                        pageWidth = state.position.pageWidth;
+                      };
 
-                    annotations = state.annotations;
-                    flexGroup = state.flexGroup;
-                    buffer = state.buffer;
-                  })
+                      annotations = state.annotations;
+                      flexGroup = state.flexGroup;
+                      buffer = state.buffer;
+                    })
                 } else {
-                  stack := List.push(#doc(doc), List.push(#dedent(state.indentSpaces, state.position.nextIndent), stk));
-                  go({
-                    indentSpaces = state.indentSpaces # opts.indentUnit;
-                    position = {
-                      nextIndent = state.position.nextIndent + opts.indentWidth;
+                  go(
+                    List.push(#doc(doc), List.push(#dedent(state.indentSpaces, state.position.nextIndent), stk)),
+                    {
+                      indentSpaces = state.indentSpaces # opts.indentUnit;
+                      position = {
+                        nextIndent = state.position.nextIndent + opts.indentWidth;
 
-                      line = state.position.line;
-                      column = state.position.column;
-                      indent = state.position.nextIndent;
-                      ribbonWidth = state.position.ribbonWidth;
-                      pageWidth = state.position.pageWidth;
-                    };
+                        line = state.position.line;
+                        column = state.position.column;
+                        indent = state.position.nextIndent;
+                        ribbonWidth = state.position.ribbonWidth;
+                        pageWidth = state.position.pageWidth;
+                      };
 
-                    annotations = state.annotations;
-                    flexGroup = state.flexGroup;
-                    buffer = state.buffer;
-                  })
+                      annotations = state.annotations;
+                      flexGroup = state.flexGroup;
+                      buffer = state.buffer;
+                    })
                 }
               };
               case (#align(width, doc)) {
                 if (state.position.column == 0) {
-                  stack := List.push(#doc(doc), List.push(#dedent(state.indentSpaces, state.position.nextIndent), stk));
-                  go({
-                    indentSpaces = state.indentSpaces # Text.join("", Iter.fromList(List.replicate(width, " ")));
-                    position = {
-                      indent = state.position.nextIndent + width;
-                      nextIndent = state.position.nextIndent + width;
-                      ribbonWidth = calcRibbonWidth(state.position.nextIndent + width);
+                  go(
+                    List.push(#doc(doc), List.push(#dedent(state.indentSpaces, state.position.nextIndent), stk)),
+                    {
+                      indentSpaces = state.indentSpaces # Text.join("", Iter.fromList(List.replicate(width, " ")));
+                      position = {
+                        indent = state.position.nextIndent + width;
+                        nextIndent = state.position.nextIndent + width;
+                        ribbonWidth = calcRibbonWidth(state.position.nextIndent + width);
 
-                      line = state.position.line;
-                      column = state.position.column;
-                      pageWidth = state.position.pageWidth;
-                    };
+                        line = state.position.line;
+                        column = state.position.column;
+                        pageWidth = state.position.pageWidth;
+                      };
 
-                    annotations = state.annotations;
-                    flexGroup = state.flexGroup;
-                    buffer = state.buffer;
-                  })
+                      annotations = state.annotations;
+                      flexGroup = state.flexGroup;
+                      buffer = state.buffer;
+                    })
                 } else {
-                  stack := List.push(#doc(doc), List.push(#dedent(state.indentSpaces, state.position.nextIndent), stk));
-                  go({
-                    indentSpaces = state.indentSpaces # Text.join("", Iter.fromList(List.replicate(width, " ")));
-                    position = {
-                      nextIndent = state.position.nextIndent + width;
+                  go(
+                    List.push(#doc(doc), List.push(#dedent(state.indentSpaces, state.position.nextIndent), stk)),
+                    {
+                      indentSpaces = state.indentSpaces # Text.join("", Iter.fromList(List.replicate(width, " ")));
+                      position = {
+                        nextIndent = state.position.nextIndent + width;
 
-                      indent = state.position.indent;
-                      ribbonWidth = state.position.ribbonWidth;
-                      line = state.position.line;
-                      column = state.position.column;
-                      pageWidth = state.position.pageWidth;
-                    };
+                        indent = state.position.indent;
+                        ribbonWidth = state.position.ribbonWidth;
+                        line = state.position.line;
+                        column = state.position.column;
+                        pageWidth = state.position.pageWidth;
+                      };
 
-                    annotations = state.annotations;
-                    flexGroup = state.flexGroup;
-                    buffer = state.buffer;
-                  })
+                      annotations = state.annotations;
+                      flexGroup = state.flexGroup;
+                      buffer = state.buffer;
+                    })
                 }
               };
               case (#flexSelect(doc1, doc2, doc3)) {
                 switch (state.flexGroup) {
                   case (#noFlexGroup) {
-                    stack := List.push(#doc(doc1), List.push(#leaveFlexGroup(doc2, doc3), stk));
-                    go({
-                      flexGroup = #flexGroupPending;
-
-                      annotations = state.annotations;
-                      indentSpaces = state.indentSpaces;
-                      buffer = state.buffer;
-                      position = state.position;
-                    })
-                  };
-                  case (#flexGroupPending) {
-                    if (state.position.ribbonWidth > 0) {
-                      let reset = #flexGroupReset(storeState(stack, state));
-                      stack := List.push(#doc(doc1), List.push(#doc(doc2), stk));
-                      go({
-                        flexGroup = reset;
-                        buffer = Buffer.branch(state.buffer);
+                    go(
+                      List.push(#doc(doc1), List.push(#leaveFlexGroup(doc2, doc3), stk)),
+                      {
+                        flexGroup = #flexGroupPending;
 
                         annotations = state.annotations;
                         indentSpaces = state.indentSpaces;
+                        buffer = state.buffer;
                         position = state.position;
                       })
+                  };
+                  case (#flexGroupPending) {
+                    if (state.position.ribbonWidth > 0) {
+                      go(
+                        List.push(#doc(doc1), List.push(#doc(doc2), stk)),
+                        {
+                          flexGroup = #flexGroupReset(storeState(stack, state));
+                          buffer = Buffer.branch(state.buffer);
+
+                          annotations = state.annotations;
+                          indentSpaces = state.indentSpaces;
+                          position = state.position;
+                        })
                     } else {
-                      stack := List.push(#doc(doc1), List.push(#doc(doc2), stk));
-                      go(state)
+                      go(List.push(#doc(doc1), List.push(#doc(doc2), stk)), state)
                     }
                   };
                   case _ {
-                    stack := List.push(#doc(doc1), List.push(#doc(doc2), stk));
-                    go(state)
+                    go(List.push(#doc(doc1), List.push(#doc(doc2), stk)), state)
                   };
                 }
               };
               case (#flexAlt(flexDoc, doc1)) {
                 switch (state.flexGroup) {
                   case (#flexGroupReset(_)) {
-                    stack := List.push(#doc(flexDoc), stk);
-                    go(state)
+                    go(List.push(#doc(flexDoc), stk), state)
                   };
                   case (#flexGroupPending) {
                     if (state.position.ribbonWidth > 0) {
-                      stack := List.push(#doc(flexDoc), stk);
-                      go({
-                        flexGroup = #flexGroupReset(storeState(List.push(#doc(doc1), stk), state));
-                        buffer = Buffer.branch(state.buffer);
+                      go(
+                        List.push(#doc(flexDoc), stk),
+                        {
+                          flexGroup = #flexGroupReset(storeState(List.push(#doc(doc1), stk), state));
+                          buffer = Buffer.branch(state.buffer);
 
-                        annotations = state.annotations;
-                        indentSpaces = state.indentSpaces;
-                        position = state.position;
-                      })
+                          annotations = state.annotations;
+                          indentSpaces = state.indentSpaces;
+                          position = state.position;
+                        })
                     } else {
-                      stack := List.push(#doc(doc1), stk);
-                      go(state)
+                      go(List.push(#doc(doc1), stk), state)
                     }
                   };
                   case _ {
-                    stack := List.push(#doc(doc1), stk);
-                    go(state)
+                    go(List.push(#doc(doc1), stk), state)
                   }
                 }
               };
@@ -723,80 +719,82 @@ public func print<Buf, A, Res>(printer : Printer<Buf, A, Res>, opts : PrintOptio
                       ribbonWidth = state.position.ribbonWidth;
                       pageWidth = state.position.pageWidth;
                   };
-                  stack := List.push(#doc(k(newPos)), stk);
-                  go(state)
+                  go(List.push(#doc(k(newPos)), stk), state)
                 } else {
-                  stack := List.push(#doc(k(state.position)), stk);
-                  go(state)
+                  go(List.push(#doc(k(state.position)), stk), state)
                 }
               };
               case (#annotate(ann, doc1)) {
-                stack := List.push(#doc(doc1), List.push(#leaveAnnotation(ann, state.annotations), stk));
-                go({
-                  annotations = List.push(ann, state.annotations);
-                  buffer = Buffer.modify(state.buffer, func(b : Buf): Buf {
-                    printer.enterAnnotation(ann, state.annotations, b)
-                  });
+                go(
+                  List.push(#doc(doc1), List.push(#leaveAnnotation(ann, state.annotations), stk)),
+                  {
+                    annotations = List.push(ann, state.annotations);
+                    buffer = Buffer.modify(state.buffer, func(b : Buf): Buf {
+                      printer.enterAnnotation(ann, state.annotations, b)
+                    });
 
-                  flexGroup = state.flexGroup;
-                  indentSpaces = state.indentSpaces;
-                  position = state.position;
-                })
+                    flexGroup = state.flexGroup;
+                    indentSpaces = state.indentSpaces;
+                    position = state.position;
+                  })
               };
               case (#empty) {
-                stack := stk;
-                go(state)
+                go(stk, state)
               };
             }
           };
           case (#leaveFlexGroup(doc1, doc2)) {
             switch (state.flexGroup) {
               case (#noFlexGroup) {
-                stack := List.push(#doc(doc2), stk);
-                go({
-                  buffer = Buffer.commit(state.buffer);
+                go(
+                  List.push(#doc(doc2), stk),
+                  {
+                    buffer = Buffer.commit(state.buffer);
 
-                  annotations = state.annotations;
-                  flexGroup = state.flexGroup;
-                  indentSpaces = state.indentSpaces;
-                  position = state.position;
-                })
+                    annotations = state.annotations;
+                    flexGroup = state.flexGroup;
+                    indentSpaces = state.indentSpaces;
+                    position = state.position;
+                  })
               };
               case _ {
-                stack := List.push(#doc(doc1), stk);
-                go({
-                  buffer = Buffer.commit(state.buffer);
-                  flexGroup = #noFlexGroup;
+                go(
+                  List.push(#doc(doc1), stk),
+                  {
+                    buffer = Buffer.commit(state.buffer);
+                    flexGroup = #noFlexGroup;
 
-                  annotations = state.annotations;
-                  indentSpaces = state.indentSpaces;
-                  position = state.position;
-                })
+                    annotations = state.annotations;
+                    indentSpaces = state.indentSpaces;
+                    position = state.position;
+                  })
               };
             }
           };
           case (#dedent(indentSpaces, nextIndent)) {
-            stack := stk;
-            go({
-              indentSpaces;
-              position = {
-                nextIndent;
+            go(
+              stk,
+              {
+                indentSpaces;
+                position = {
+                  nextIndent;
 
-                indent = state.position.indent;
-                ribbonWidth = state.position.ribbonWidth;
-                line = state.position.line;
-                column = state.position.column;
-                pageWidth = state.position.pageWidth;
-              };
+                  indent = state.position.indent;
+                  ribbonWidth = state.position.ribbonWidth;
+                  line = state.position.line;
+                  column = state.position.column;
+                  pageWidth = state.position.pageWidth;
+                };
 
-              annotations = state.annotations;
-              flexGroup = state.flexGroup;
-              buffer = state.buffer;
-            })
+                annotations = state.annotations;
+                flexGroup = state.flexGroup;
+                buffer = state.buffer;
+              })
           };
           case (#leaveAnnotation(ann, annotations)) {
-            stack := stk;
-            go({
+            go(
+              stk,
+              {
                 annotations;
                 buffer = Buffer.modify(state.buffer, func(b : Buf): Buf {
                   printer.leaveAnnotation(ann, annotations, b)
@@ -812,6 +810,6 @@ public func print<Buf, A, Res>(printer : Printer<Buf, A, Res>, opts : PrintOptio
     }
   };
 
-  go(initialState)
+  go(List.make(#doc(doc)), initialState)
 };
 }
