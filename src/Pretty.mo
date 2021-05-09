@@ -1,14 +1,4 @@
 /// A pretty printing library
-///
-/// Make it easy and fun to use your new library by including some module specific documentation here.
-/// It's always a good idea to include a minimal working example:
-///
-/// ```motoko
-/// import LibraryTemplate "mo:library-template/Library";
-///
-/// assert(LibraryTemplate.isPalindrome("anna"));
-/// assert(not LibraryTemplate.isPalindrome("christoph"));
-/// ```
 
 import Array "mo:base/Array";
 import Buffer "../internal/Buffer";
@@ -23,7 +13,7 @@ import Text "mo:base/Text";
 module {
 
 /// Document lines and columns are 0-based offsets.
-type Position = {
+public type Position = {
   line : Nat;
   column : Nat;
   indent : Nat;
@@ -46,7 +36,7 @@ func setColumn(pos : Position, col : Nat) : Position {
 /// Documents are built using `append` as horizontal, line-wise concatenation.
 /// The functions in this module let you build documents that respond well
 /// to width constraints (such as `flexGroup` and `flexAlt`).
-type Doc<A> = {
+public type Doc<A> = {
   #append : (Doc<A>, Doc<A>);
   #indent : Doc<A>;
   #align : (Nat, Doc<A>);
@@ -137,13 +127,23 @@ public func mapDoc<A, B>(doc : Doc<A>, f : A -> B): Doc<B> {
   }
 };
 
-public func append<A>(d1: Doc<A>, d2: Doc<A>): Doc<A> {
+/// Appending two documents will put them next to each other on a line.
+public func append<A>(d1 : Doc<A>, d2 : Doc<A>) : Doc<A> {
   switch (d1, d2) {
     case (#empty, _) { d2 };
     case (_, #empty) { d1 };
     case (#text(n1, t1), #text(n2, t2)) { #text(n1 + n2, t1 # t2) };
     case (_, _) { #append(d1, d2) };
   }
+};
+
+/// Appends all given documents
+public func appendAll<A>(ds : Iter.Iter<Doc<A>>) : Doc<A> {
+  var res : Doc<A> = #empty;
+  for (d in ds) {
+    res := append(d, res);
+  };
+  res
 };
 
 public func bothNotEmpty<A>(d1: Doc<A>, d2: Doc<A>, f: (Doc<A>, Doc<A>) -> Doc<A>): Doc<A> {
