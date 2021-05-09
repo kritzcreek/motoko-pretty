@@ -1,4 +1,4 @@
 let upstream =
-      https://github.com/dfinity/vessel-package-set/releases/download/mo-0.5.14-20200413/package-set.dhall sha256:b1d0940d2f955be54c5abbc953b879c8377d73856456fe6417db0058ad4d7969
+      https://github.com/dfinity/vessel-package-set/releases/download/mo-0.6.0-20210426/package-set.dhall sha256:8a52f4f26fae1e7765d979e6b9e37d0f7515f5ca6a49d000bb74af80a3581acb
 
 in  upstream
