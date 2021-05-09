@@ -10,6 +10,7 @@
 /// assert(not LibraryTemplate.isPalindrome("christoph"));
 /// ```
 
+import Array "mo:base/Array";
 import Buffer "../internal/Buffer";
 import Float "mo:base/Float";
 import Int "mo:base/Int";
@@ -109,7 +110,7 @@ public func append<A>(d1: Doc<A>, d2: Doc<A>): Doc<A> {
   }
 };
 
-public func bothNotEmpty<A>(f: (Doc<A>, Doc<A>) -> Doc<A>, d1: Doc<A>, d2: Doc<A>): Doc<A> {
+public func bothNotEmpty<A>(d1: Doc<A>, d2: Doc<A>, f: (Doc<A>, Doc<A>) -> Doc<A>): Doc<A> {
   switch (d1, d2) {
     case (#empty, _) { d2 };
     case (_, #empty) { d1 };
@@ -128,19 +129,196 @@ public func isEmpty<A>(doc: Doc<A>): Bool {
   }
 };
 
-// -- | Only applies the provided function if both documents are
-// -- | non-empty, otherwise just yields whichever is non-empty.
-// bothNotEmpty :: forall a. (Doc a -> Doc a -> Doc a) -> Doc a -> Doc a -> Doc a
-// bothNotEmpty f = case _, _ of
-//   Empty, b -> b
-//   a, Empty -> a
-//   a, b -> f a b
+/// Only applies the provided function if the document is non-empty.
+func notEmpty<A>(doc : Doc<A>, f : Doc<A> -> Doc<A>) : Doc<A> {
+  switch doc {
+    case (#empty) { #empty };
+    case _ { f(doc) };
+  }
+};
 
-// -- | Only applies the provided function if the document is non-empty.
-// notEmpty :: forall a. (Doc a -> Doc a) -> Doc a -> Doc a
-// notEmpty f = case _ of
-//   Empty -> Empty
-//   b -> f b
+// The user-facing combinators
+
+/// Increases the indentation level by one indent.
+public func indent<A>(doc : Doc<A>) : Doc<A> {
+  notEmpty<A>(doc, func d { #indent(d) })
+};
+
+/// Increases the indentation level by the number of spaces (for alignment purposes).
+public func align<A>(n : Nat, doc : Doc<A>) : Doc<A> {
+  if (n > 0) {
+    notEmpty<A>(doc, func d { #align(n, d) })
+  } else {
+    doc
+  }
+};
+
+/// Increases the indentation level so that it aligns to the current column.
+public func alignCurrentColumn<A>(doc : Doc<A>) : Doc<A> {
+  notEmpty<A>(doc, func d {
+    withPosition<A>(func pos {
+      let n : Nat = if (pos.column > pos.nextIndent) {
+        pos.column - pos.nextIndent
+      } else {
+        0
+      };
+      align(n, doc)
+    })
+  })
+};
+
+/// Adds an annotation to a document. Printers can interpret annotations to style
+/// their output, eg. ANSI colors.
+public func annotate<A>(annotation : A, doc : Doc<A>) : Doc<A> {
+  notEmpty<A>(doc, func d { #annotate(annotation, d) })
+};
+
+/// Attempts to layout the document with flex alternatives, falling back
+/// to defaults if it doesn't fit the page width.
+public func flexGroup<A>(doc : Doc<A>) : Doc<A> {
+  notEmpty<A>(doc, func d {
+    switch d {
+      case(#flexSelect(_, a, b)) {
+        if (isEmpty(a) and isEmpty(b)) {
+          d
+        } else {
+          #flexSelect(doc, #empty, #empty)
+        }
+      };
+      case _ { #flexSelect(doc, #empty, #empty) };
+    }
+  })
+};
+
+/// Attempts to layout the first document with flex alternatives, falling
+/// back to defaults if it doesn't fit the page width. If the flex alternatives
+/// are used then the second document will be appended, otherwise the third
+/// document will be appended.
+// TODO: Find good names for the parameters here
+public func flexSelect<A>(doc : Doc<A>, defaults : Doc<A>, fallback : Doc<A>) : Doc<A> {
+  if (isEmpty(doc)) {
+    defaults
+  } else {
+    #flexSelect(doc, defaults, fallback)
+  }
+};
+
+/// Attempts to layout the first document when in a flex group, falling back
+/// to the second as a default.
+public func flexAlt<A>(doc : Doc<A>, fallback : Doc<A>) : Doc<A> {
+  #flexAlt(doc, fallback)
+};
+
+/// Build a document based on the current layout position.
+public func withPosition<A>(f : Position -> Doc<A>) : Doc<A> {
+  #withPosition(f)
+};
+
+
+/// The most basic document leaf. This should not contain newlines. If it does
+/// your document will look very funny.
+public func text<A>(t : Text) : Doc<A> {
+  if (t == "") {
+    #empty
+  } else {
+    #text(Text.size(t), t)
+  }
+};
+
+/// Inserts a hard line break.
+public func lineBreak<A>() : Doc<A> { #linebreak };
+
+/// Inserts a space when in a flex group, otherwise inserts a break.
+public func spaceBreak<A>() : Doc<A> { flexAlt(space(), lineBreak()) };
+
+/// Inserts nothing when in a flex group, otherwise inserts a break.
+public func softBreak<A>() : Doc<A> { flexAlt(#empty, lineBreak()) };
+
+/// A singe space character.
+public func space<A>() : Doc<A> { text(" ") };
+
+/// Appends documents with a break in between them.
+public func lines<A>(docs : [Doc<A>]) : Doc<A> {
+  Array.foldRight<Doc<A>, Doc<A>>(docs, #empty, func (d1, d2) {
+    // TODO: Ask why I can't eta reduce here?
+      appendBreak(d1, d2)
+    })
+};
+
+/// Appends documents with a space in between them.
+public func words<A>(docs : [Doc<A>]) : Doc<A> {
+  Array.foldRight<Doc<A>, Doc<A>>(docs, #empty, func (d1, d2) {
+    // TODO: Ask why I can't eta reduce here?
+      appendSpace(d1, d2)
+    })
+};
+
+/// Appends documents with a space-break in between them.
+public func paragraph<A>(docs : [Doc<A>]) : Doc<A> {
+  Array.foldRight<Doc<A>, Doc<A>>(docs, #empty, func (d1, d2) {
+    // TODO: Ask why I can't eta reduce here?
+      appendSpaceBreak(d1, d2)
+    })
+};
+
+/// Appends two documents with a break between them.
+public func appendBreak<A>(doc1 : Doc<A>, doc2 : Doc<A>) : Doc<A> {
+  bothNotEmpty<A>(doc1, doc2, func (a, b) {
+    append(a, append(lineBreak(), b))
+  })
+};
+
+/// Appends two documents with a space between them.
+public func appendSpace<A>(doc1 : Doc<A>, doc2 : Doc<A>) : Doc<A> {
+  bothNotEmpty<A>(doc1, doc2, func (a, b) {
+    append(a, append(space(), b))
+  })
+};
+
+/// Appends two documents with a space between them, falling back to a
+/// break if that does not fit.
+public func appendSpaceBreak<A>(doc1 : Doc<A>, doc2 : Doc<A>) : Doc<A> {
+  bothNotEmpty<A>(doc1, doc2, func (a, b) {
+    append(a, flexGroup(append(space(), b)))
+  })
+};
+
+/// Uses an opening and closing document to wrap another document.
+public func enclose<A>(open : Doc<A>, close : Doc<A>, inner : Doc<A>) : Doc<A> {
+  append(open, append(inner, close))
+};
+
+/// Uses an opening and closing document to wrap another document, falling
+/// back when the inner document is empty.
+/// ```motoko
+/// encloseEmptyAlt(text("[ "), text(" ]"), text("[]"), #empty)
+/// ```
+public func encloseEmptyAlt<A>(open : Doc<A>, close : Doc<A>, fallback : Doc<A>, inner : Doc<A>) : Doc<A> {
+  if (isEmpty(inner)) {
+    fallback
+  } else {
+    append(open, append(inner, close))
+  }
+};
+
+/// Uses an opening and closing document, as a well as a separator, to render
+/// a series of documents.
+public func encloseWithSeparator<A>(open : Doc<A>, close : Doc<A>, separator : Doc<A>, inner : [Doc<A>]) : Doc<A> {
+  append(open, append(foldWithSeparator(separator, inner), close))
+};
+
+/// Appends a series of documents together with a separator in between them.
+public func foldWithSeparator<A>(separator : Doc<A>, docs : [Doc<A>]) : Doc<A> {
+  foldWith<A>(docs, func (d1, d2) { append(d1, append(separator, d2)) })
+};
+
+/// Appends a series of documents together with a given append function. This
+/// is notable because it ignores empty documents.
+public func foldWith<A>(docs : [Doc<A>], f : (Doc<A>, Doc<A>) -> Doc<A>) : Doc<A> {
+  Array.foldRight<Doc<A>, Doc<A>>(docs, #empty, func(d1, d2) {
+    bothNotEmpty(d1, d2, f)
+  })
+};
 
 public type Printer<Buf, A, Res> = {
   emptyBuffer : Buf;
@@ -152,7 +330,7 @@ public type Printer<Buf, A, Res> = {
   flushBuffer : Buf -> Res;
 };
 
-/// A plain text printer. Can be used with any document.
+/// A plain text printer. Can be used with any dument.
 public let plainText : Printer<Text, Any, Text> = {
   emptyBuffer = "";
   writeText = func(_, str, buf) { buf # str };
@@ -239,7 +417,6 @@ func storeState<A, B>(stack : List.List<DocCmd<A>>, st : DocState<B, A>) : FlexG
 /// This will use full line-lookahead from the start of a flex group. If it
 /// encounters a break or content overflows the page-width, it will layout
 /// the group using flex alternative defaults instead.
-
 public func print<Buf, A, Res>(printer : Printer<Buf, A, Res>, opts : PrintOptions, doc : Doc<A>) : Res {
   let ribbonRatio : Float = Float.max(0.0, (Float.min(1.0, opts.ribbonRatio)));
   func calcRibbonWidth(x : Nat) : Nat {
