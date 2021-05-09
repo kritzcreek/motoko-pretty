@@ -284,7 +284,6 @@ public func lines<A>(docs : [Doc<A>]) : Doc<A> {
 /// Appends documents with a space in between them.
 public func words<A>(docs : [Doc<A>]) : Doc<A> {
   Array.foldRight<Doc<A>, Doc<A>>(docs, #empty, func (d1, d2) {
-    // TODO: Ask why I can't eta reduce here?
       appendSpace(d1, d2)
     })
 };
@@ -292,7 +291,6 @@ public func words<A>(docs : [Doc<A>]) : Doc<A> {
 /// Appends documents with a space-break in between them.
 public func paragraph<A>(docs : [Doc<A>]) : Doc<A> {
   Array.foldRight<Doc<A>, Doc<A>>(docs, #empty, func (d1, d2) {
-    // TODO: Ask why I can't eta reduce here?
       appendSpaceBreak(d1, d2)
     })
 };
