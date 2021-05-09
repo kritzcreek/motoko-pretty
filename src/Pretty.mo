@@ -12,6 +12,7 @@
 
 import Array "mo:base/Array";
 import Buffer "../internal/Buffer";
+import Char "mo:base/Char";
 import Float "mo:base/Float";
 import Int "mo:base/Int";
 import Iter "mo:base/Iter";
@@ -261,6 +262,17 @@ public func paragraph<A>(docs : [Doc<A>]) : Doc<A> {
     })
 };
 
+let isWhitespace : Text.Pattern = #predicate(func c {
+    Char.isWhitespace(c)
+});
+
+/// Constructs a wrapping paragraph from a blob of text. Ignores newlines and
+/// multiple spaces.
+public func textParagraph<A>(t : Text) : Doc<A> {
+  let texts = Text.split(Text.trim(t, isWhitespace), isWhitespace);
+  paragraph(Array.map<Text, Doc<A>>(Iter.toArray(texts), func t { text(t) }))
+};
+
 /// Appends two documents with a break between them.
 public func appendBreak<A>(doc1 : Doc<A>, doc2 : Doc<A>) : Doc<A> {
   bothNotEmpty<A>(doc1, doc2, func (a, b) {
@@ -363,6 +375,14 @@ public let twoSpaces: PrintOptions = {
   indentWidth = 2;
 };
 
+/// Prints 4-space indents, with a default 80-column page width.
+public let fourSpaces: PrintOptions = {
+  pageWidth = 80;
+  ribbonRatio = 1.0;
+  indentUnit = "    ";
+  indentWidth = 4;
+};
+
 type DocCmd<A> = {
   #doc : (Doc<A>);
   #dedent : (Text, Nat);
@@ -438,7 +458,7 @@ public func print<Buf, A, Res>(printer : Printer<Buf, A, Res>, opts : PrintOptio
     flexGroup = #noFlexGroup;
   };
 
-  var stack: List.List<DocCmd<A>> = List.nil();
+  var stack: List.List<DocCmd<A>> = List.make(#doc(doc));
 
   func go(state : DocState<Buf, A>) : Res {
     switch stack {
@@ -448,7 +468,7 @@ public func print<Buf, A, Res>(printer : Printer<Buf, A, Res>, opts : PrintOptio
           case (#doc(doc)) {
             switch(doc) {
               case (#append(doc1, doc2)) {
-                stack := List.push(#doc(doc1), List.push(#doc(doc2), stack));
+                stack := List.push(#doc(doc1), List.push(#doc(doc2), stk));
                 go(state)
               };
               case (#text(len, str)) {
@@ -465,6 +485,7 @@ public func print<Buf, A, Res>(printer : Printer<Buf, A, Res>, opts : PrintOptio
                       position = setColumn(state.position, state.position.indent);
                     })
                 } else if (state.position.column + len <= state.position.indent + state.position.ribbonWidth) {
+                  stack := stk;
                   go({
                       annotations = state.annotations;
                       indentSpaces = state.indentSpaces;
@@ -479,6 +500,7 @@ public func print<Buf, A, Res>(printer : Printer<Buf, A, Res>, opts : PrintOptio
                       go(resetState(frame))
                     };
                     case _ {
+                      stack := stk;
                       go({
                         annotations = state.annotations;
                         indentSpaces = state.indentSpaces;
@@ -497,26 +519,27 @@ public func print<Buf, A, Res>(printer : Printer<Buf, A, Res>, opts : PrintOptio
                     go(resetState(frame))
                   };
                   case _ {
-                      go({
-                        annotations = state.annotations;
-                        indentSpaces = state.indentSpaces;
-                        flexGroup = #noFlexGroup;
-                        buffer = Buffer.modify(state.buffer, printer.writeBreak);
-                        position = {
-                          line = state.position.line + 1;
-                          column = 0;
-                          indent = state.position.nextIndent;
-                          ribbonWidth = calcRibbonWidth(state.position.nextIndent);
-                          nextIndent = state.position.nextIndent;
-                          pageWidth = state.position.pageWidth;
-                        };
-                      })
+                    stack := stk;
+                    go({
+                      annotations = state.annotations;
+                      indentSpaces = state.indentSpaces;
+                      flexGroup = #noFlexGroup;
+                      buffer = Buffer.modify(state.buffer, printer.writeBreak);
+                      position = {
+                        line = state.position.line + 1;
+                        column = 0;
+                        indent = state.position.nextIndent;
+                        ribbonWidth = calcRibbonWidth(state.position.nextIndent);
+                        nextIndent = state.position.nextIndent;
+                        pageWidth = state.position.pageWidth;
+                      };
+                    })
                   };
                 }
               };
               case (#indent(doc)) {
                 if (state.position.column == 0) {
-                  stack := List.push(#doc(doc), List.push(#dedent(state.indentSpaces, state.position.nextIndent), stack));
+                  stack := List.push(#doc(doc), List.push(#dedent(state.indentSpaces, state.position.nextIndent), stk));
                   go({
                     indentSpaces = state.indentSpaces # opts.indentUnit;
                     position = {
@@ -534,7 +557,7 @@ public func print<Buf, A, Res>(printer : Printer<Buf, A, Res>, opts : PrintOptio
                     buffer = state.buffer;
                   })
                 } else {
-                  stack := List.push(#doc(doc), List.push(#dedent(state.indentSpaces, state.position.nextIndent), stack));
+                  stack := List.push(#doc(doc), List.push(#dedent(state.indentSpaces, state.position.nextIndent), stk));
                   go({
                     indentSpaces = state.indentSpaces # opts.indentUnit;
                     position = {
@@ -555,7 +578,7 @@ public func print<Buf, A, Res>(printer : Printer<Buf, A, Res>, opts : PrintOptio
               };
               case (#align(width, doc)) {
                 if (state.position.column == 0) {
-                  stack := List.push(#doc(doc), List.push(#dedent(state.indentSpaces, state.position.nextIndent), stack));
+                  stack := List.push(#doc(doc), List.push(#dedent(state.indentSpaces, state.position.nextIndent), stk));
                   go({
                     indentSpaces = state.indentSpaces # Text.join("", Iter.fromList(List.replicate(width, " ")));
                     position = {
@@ -573,7 +596,7 @@ public func print<Buf, A, Res>(printer : Printer<Buf, A, Res>, opts : PrintOptio
                     buffer = state.buffer;
                   })
                 } else {
-                  stack := List.push(#doc(doc), List.push(#dedent(state.indentSpaces, state.position.nextIndent), stack));
+                  stack := List.push(#doc(doc), List.push(#dedent(state.indentSpaces, state.position.nextIndent), stk));
                   go({
                     indentSpaces = state.indentSpaces # Text.join("", Iter.fromList(List.replicate(width, " ")));
                     position = {
@@ -595,7 +618,7 @@ public func print<Buf, A, Res>(printer : Printer<Buf, A, Res>, opts : PrintOptio
               case (#flexSelect(doc1, doc2, doc3)) {
                 switch (state.flexGroup) {
                   case (#noFlexGroup) {
-                    stack := List.push(#doc(doc1), List.push(#leaveFlexGroup(doc2, doc3), stack));
+                    stack := List.push(#doc(doc1), List.push(#leaveFlexGroup(doc2, doc3), stk));
                     go({
                       flexGroup = #flexGroupPending;
 
@@ -608,7 +631,7 @@ public func print<Buf, A, Res>(printer : Printer<Buf, A, Res>, opts : PrintOptio
                   case (#flexGroupPending) {
                     if (state.position.ribbonWidth > 0) {
                       let reset = #flexGroupReset(storeState(stack, state));
-                      stack := List.push(#doc(doc1), List.push(#doc(doc2), stack));
+                      stack := List.push(#doc(doc1), List.push(#doc(doc2), stk));
                       go({
                         flexGroup = reset;
                         buffer = Buffer.branch(state.buffer);
@@ -618,12 +641,12 @@ public func print<Buf, A, Res>(printer : Printer<Buf, A, Res>, opts : PrintOptio
                         position = state.position;
                       })
                     } else {
-                      stack := List.push(#doc(doc1), List.push(#doc(doc2), stack));
+                      stack := List.push(#doc(doc1), List.push(#doc(doc2), stk));
                       go(state)
                     }
                   };
                   case _ {
-                    stack := List.push(#doc(doc1), List.push(#doc(doc2), stack));
+                    stack := List.push(#doc(doc1), List.push(#doc(doc2), stk));
                     go(state)
                   };
                 }
@@ -631,14 +654,14 @@ public func print<Buf, A, Res>(printer : Printer<Buf, A, Res>, opts : PrintOptio
               case (#flexAlt(flexDoc, doc1)) {
                 switch (state.flexGroup) {
                   case (#flexGroupReset(_)) {
-                    stack := List.push(#doc(flexDoc), stack);
+                    stack := List.push(#doc(flexDoc), stk);
                     go(state)
                   };
                   case (#flexGroupPending) {
                     if (state.position.ribbonWidth > 0) {
-                      stack := List.push(#doc(flexDoc), stack);
+                      stack := List.push(#doc(flexDoc), stk);
                       go({
-                        flexGroup = #flexGroupReset(storeState(List.push(#doc(doc1), stack), state));
+                        flexGroup = #flexGroupReset(storeState(List.push(#doc(doc1), stk), state));
                         buffer = Buffer.branch(state.buffer);
 
                         annotations = state.annotations;
@@ -646,12 +669,12 @@ public func print<Buf, A, Res>(printer : Printer<Buf, A, Res>, opts : PrintOptio
                         position = state.position;
                       })
                     } else {
-                      stack := List.push(#doc(doc1), stack);
+                      stack := List.push(#doc(doc1), stk);
                       go(state)
                     }
                   };
                   case _ {
-                    stack := List.push(#doc(doc1), stack);
+                    stack := List.push(#doc(doc1), stk);
                     go(state)
                   }
                 }
@@ -667,15 +690,15 @@ public func print<Buf, A, Res>(printer : Printer<Buf, A, Res>, opts : PrintOptio
                       ribbonWidth = state.position.ribbonWidth;
                       pageWidth = state.position.pageWidth;
                   };
-                  stack := List.push(#doc(k(newPos)), stack);
+                  stack := List.push(#doc(k(newPos)), stk);
                   go(state)
                 } else {
-                  stack := List.push(#doc(k(state.position)), stack);
+                  stack := List.push(#doc(k(state.position)), stk);
                   go(state)
                 }
               };
               case (#annotate(ann, doc1)) {
-                stack := List.push(#doc(doc1), List.push(#leaveAnnotation(ann, state.annotations), stack));
+                stack := List.push(#doc(doc1), List.push(#leaveAnnotation(ann, state.annotations), stk));
                 go({
                   annotations = List.push(ann, state.annotations);
                   buffer = Buffer.modify(state.buffer, func(b : Buf): Buf {
@@ -688,6 +711,7 @@ public func print<Buf, A, Res>(printer : Printer<Buf, A, Res>, opts : PrintOptio
                 })
               };
               case (#empty) {
+                stack := stk;
                 go(state)
               };
             }
@@ -695,7 +719,7 @@ public func print<Buf, A, Res>(printer : Printer<Buf, A, Res>, opts : PrintOptio
           case (#leaveFlexGroup(doc1, doc2)) {
             switch (state.flexGroup) {
               case (#noFlexGroup) {
-                stack := List.push(#doc(doc2), stack);
+                stack := List.push(#doc(doc2), stk);
                 go({
                   buffer = Buffer.commit(state.buffer);
 
@@ -706,7 +730,7 @@ public func print<Buf, A, Res>(printer : Printer<Buf, A, Res>, opts : PrintOptio
                 })
               };
               case _ {
-                stack := List.push(#doc(doc1), stack);
+                stack := List.push(#doc(doc1), stk);
                 go({
                   buffer = Buffer.commit(state.buffer);
                   flexGroup = #noFlexGroup;
@@ -719,6 +743,7 @@ public func print<Buf, A, Res>(printer : Printer<Buf, A, Res>, opts : PrintOptio
             }
           };
           case (#dedent(indentSpaces, nextIndent)) {
+            stack := stk;
             go({
               indentSpaces;
               position = {
@@ -737,6 +762,7 @@ public func print<Buf, A, Res>(printer : Printer<Buf, A, Res>, opts : PrintOptio
             })
           };
           case (#leaveAnnotation(ann, annotations)) {
+            stack := stk;
             go({
                 annotations;
                 buffer = Buffer.modify(state.buffer, func(b : Buf): Buf {
