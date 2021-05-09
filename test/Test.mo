@@ -4,9 +4,11 @@ import Pretty "../src/Pretty";
 import S "mo:matchers/Suite";
 import T "mo:matchers/Testable";
 
-let suite = S.suite("pretty", []);
+// let suite = S.suite("pretty", []);
 
-S.run(suite);
+// S.run(suite);
+
+Debug.print("Starting:");
 
 let printOpts : Pretty.PrintOptions = {
   pageWidth = 12;
@@ -23,3 +25,9 @@ let test1 = Pretty.lines([
 ]);
 
 Debug.print(Pretty.print(Pretty.plainText, printOpts, test1));
+
+let test2 = Pretty.appendSpaceBreak(Pretty.text "11111111", Pretty.text "11111111");
+Debug.print(Pretty.print(Pretty.plainText, printOpts, test2));
+
+let test3 = Pretty.appendBreak(Pretty.text "11111111", Pretty.indent(Pretty.text "22222222"));
+Debug.print(Pretty.print(Pretty.plainText, printOpts, test3));
