@@ -191,7 +191,7 @@ public func align<A>(n : Nat, doc : Doc<A>) : Doc<A> {
 
 /// Increases the indentation level so that it aligns to the current column.
 public func alignCurrentColumn<A>(doc : Doc<A>) : Doc<A> {
-  notEmpty<A>(doc, func d {
+  notEmpty<A>(doc, func doc {
     withPosition<A>(func pos {
       let n : Nat = if (pos.column > pos.nextIndent) {
         pos.column - pos.nextIndent
@@ -290,7 +290,7 @@ public func words<A>(docs : [Doc<A>]) : Doc<A> {
 
 /// Appends documents with a space-break in between them.
 public func paragraph<A>(docs : [Doc<A>]) : Doc<A> {
-  Array.foldRight<Doc<A>, Doc<A>>(docs, #empty, func (d1, d2) {
+  Array.foldLeft<Doc<A>, Doc<A>>(docs, #empty, func (d1, d2) {
       appendSpaceBreak(d1, d2)
     })
 };
@@ -324,7 +324,7 @@ public func appendSpace<A>(doc1 : Doc<A>, doc2 : Doc<A>) : Doc<A> {
 /// break if that does not fit.
 public func appendSpaceBreak<A>(doc1 : Doc<A>, doc2 : Doc<A>) : Doc<A> {
   bothNotEmpty<A>(doc1, doc2, func (a, b) {
-    append(a, flexGroup(append(space(), b)))
+    append(a, flexGroup(append(spaceBreak(), b)))
   })
 };
 
