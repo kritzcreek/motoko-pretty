@@ -6,6 +6,12 @@ Ported from [purescript-dodo-printer](https://github.com/natefaubion/purescript-
 
 All credit goes to Nathan Faubion
 
+## Examples
+
+More examples are coming, but for now there's a basic Json printer in `test/JsonExample.mo` to
+give you an idea.
+You can run it with `make -C test json`.
+
 ## How to develop
 
 - Write your library code in `*.mo` source files in the `src/` directory.
