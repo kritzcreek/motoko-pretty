@@ -76,14 +76,21 @@ func prettyJson(json : Json) : Text {
   P.print(P.plainText, P.twoSpaces, go(json))
 };
 
-let j1 = jArray([
-  jNumber(10), jNumber(20), jString("hi dude"), jNumber(30), jNumber(40),
-  jNumber(100000), jNumber(100000), jNumber(100000), jNumber(100000)
-]);
+func j1(inner : Json) : Json {
+  jArray([
+    jNumber(10), jNumber(20), jString("hi dude"), jNumber(30), jNumber(40),
+    jNumber(100000), jNumber(100000), inner, jNumber(100000)
+  ])
+};
 let j2 = jObj([
   ("Hello", jNumber(10)), ("MyDude", jNumber(20)), ("What a wonderful day", jString("hi dude")),
-  ("Hello2", jNumber(10)), ("MyDude2", jNumber(20)), ("What a wonderful day2", j1),
+  ("Hello2", jNumber(10)), ("MyDude2", jNumber(20)), ("What a wonderful day2", j1(jNumber(20000))),
+]);
+let j3 = jObj([
+  ("Hello", jNumber(10)), ("MyDude", jNumber(20)), ("What a wonderful day", jString("hi dude")),
+  ("Hello2", jNumber(10)), ("MyDude2", jNumber(20)), ("What a wonderful day2", j1(j1(jString("that's a long line, my friend")))),
 ]);
 
-Debug.print(prettyJson(j1));
+Debug.print(prettyJson(j1(jNumber(20000))));
 Debug.print(prettyJson(j2));
+Debug.print(prettyJson(j3));
