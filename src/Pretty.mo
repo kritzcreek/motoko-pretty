@@ -141,7 +141,7 @@ public func append<A>(d1 : Doc<A>, d2 : Doc<A>) : Doc<A> {
 public func appendAll<A>(ds : Iter.Iter<Doc<A>>) : Doc<A> {
   var res : Doc<A> = #empty;
   for (d in ds) {
-    res := append(d, res);
+    res := append(res, d);
   };
   res
 };
@@ -375,7 +375,7 @@ public type Printer<Buf, A, Res> = {
   flushBuffer : Buf -> Res;
 };
 
-/// A plain text printer. Can be used with any dument.
+/// A plain text printer. Can be used with any document.
 public let plainText : Printer<Text, Any, Text> = {
   emptyBuffer = "";
   writeText = func(_, str, buf) { buf # str };
